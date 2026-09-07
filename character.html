@@ -107,11 +107,17 @@ const indices = [
         geom.computeBoundingBox();
 
         const center = new THREE.Vector3();
+        const size = new THREE.Vector3();
         geom.boundingBox.getCenter(center);
+        geom.boundingBox.getSize(size);
 
-        mesh.position.x = -center.x;
-        mesh.position.z = -center.z;
-        mesh.position.y = -geom.boundingBox.min.y;
+        const maxSize = Math.max(size.x, size.y, size.z);
+        const scale = 1.2 / maxSize;
+
+        mesh.scale.setScalar(scale);
+        mesh.position.x = -center.x * scale;
+        mesh.position.z = -center.z * scale;
+        mesh.position.y = -geom.boundingBox.min.y * scale;
 
         scene.add(mesh);
 
@@ -119,16 +125,12 @@ const indices = [
         const lightSettings = {
             x: directionalLight.position.x,
             y: directionalLight.position.y,
-            z: directionalLight.position.z,
-            intensity: directionalLight.intensity,
-            color: mat.color.getHex()
+            z: directionalLight.position.z
         };
         gui.add(lightSettings, 'x', -20, 20).onChange(value => directionalLight.position.x = value);
         gui.add(lightSettings, 'y', -20, 20).onChange(value => directionalLight.position.y = value);
         gui.add(lightSettings, 'z', -20, 20).onChange(value => directionalLight.position.z = value);
-        gui.add(lightSettings, 'intensity', 0, 3).onChange(value => directionalLight.intensity = value);
-        gui.addColor(lightSettings, 'color').onChange(value => mat.color.set(value));
-
+        
         //ใส่พื้น
         const texFloor = new THREE.TextureLoader().load('https://chayanit1148.github.io/Chayanit1148/wood_table_worn_diff_1k.jpg', t => {
         });
