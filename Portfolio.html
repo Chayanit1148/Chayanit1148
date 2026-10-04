@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Dark Scene</title>
+    <title>Interactive Portfolio</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; }
         iframe { display: none; }
@@ -21,6 +21,7 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.outputEncoding = THREE.sRGBEncoding;
         document.body.appendChild(renderer.domElement);
 
         const scene = new THREE.Scene();
@@ -43,29 +44,46 @@
         directionalLight.castShadow = true;
         scene.add(directionalLight);
 
-        const fireflyCount = 40;
-        const fireflyGeometry = new THREE.BufferGeometry();
-        const fireflyPositions = new Float32Array(fireflyCount * 3);
-        const fireflyInitialY = new Float32Array(fireflyCount);
-        const fireflySpeeds = new Float32Array(fireflyCount);
+        const colors = new Uint8Array([100, 180, 255]);
+        const gradientMap = new THREE.DataTexture(colors, colors.length, 1, THREE.LuminanceFormat);
+        gradientMap.minFilter = THREE.NearestFilter;
+        gradientMap.magFilter = THREE.NearestFilter;
+        gradientMap.needsUpdate = true;
 
-        for (let i = 0; i < fireflyCount; i++) {
-            fireflyPositions[i * 3] = (Math.random() - 0.5) * 6;
-            fireflyPositions[i * 3 + 1] = Math.random() * 3;
-            fireflyPositions[i * 3 + 2] = (Math.random() - 0.5) * 6;
-            fireflyInitialY[i] = fireflyPositions[i * 3 + 1];
-            fireflySpeeds[i] = 0.5 + Math.random() * 1.5;
-        }
-
-        fireflyGeometry.setAttribute('position', new THREE.BufferAttribute(fireflyPositions, 3));
-        const fireflyMaterial = new THREE.PointsMaterial({
-            color: 0xffea79,
-            size: 0.04,
+        const fireflyShaderMaterial = new THREE.ShaderMaterial({
+            uniforms: { uTime: { value: 0.0 } },
+            vertexShader: `
+                uniform float uTime;
+                void main() {
+                    vec3 pos = position;
+                    pos.y += sin(uTime * 2.0 + position.x * 10.0) * 0.15;
+                    pos.x += cos(uTime * 1.5 + position.y * 10.0) * 0.05;
+                    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                    gl_PointSize = 4.0;
+                    gl_Position = projectionMatrix * mvPosition;
+                }
+            `,
+            fragmentShader: `
+                void main() {
+                    float d = length(gl_PointCoord - vec2(0.5));
+                    if (d > 0.5) discard;
+                    gl_FragColor = vec4(1.0, 0.9, 0.4, 0.85);
+                }
+            `,
             transparent: true,
-            opacity: 0.85,
             blending: THREE.AdditiveBlending
         });
-        scene.add(new THREE.Points(fireflyGeometry, fireflyMaterial));
+
+        const fireflyCount = 40;
+        const fireflyGeometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(fireflyCount * 3);
+        for (let i = 0; i < fireflyCount * 3; i += 3) {
+            positions[i] = (Math.random() - 0.5) * 6;
+            positions[i + 1] = Math.random() * 3;
+            positions[i + 2] = (Math.random() - 0.5) * 6;
+        }
+        fireflyGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        scene.add(new THREE.Points(fireflyGeometry, fireflyShaderMaterial));
 
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
@@ -81,10 +99,26 @@
                     child.castShadow = true;
                     child.receiveShadow = true;
                     interactiveObjects.push(child);
+
+                    const name = child.name.toLowerCase();
+
+                    const isComputerScreen = name.includes('computer') || name.includes('screen') || name.includes('display') || name.includes('plane');
+
+                    if (!isComputerScreen && child.material) {
+                        const oldMap = child.material.map;
+                        const oldColor = child.material.color ? child.material.color.clone() : new THREE.Color(0xffffff);
+
+                        child.material = new THREE.MeshToonMaterial({
+                            map: oldMap,
+                            color: oldColor,
+                            gradientMap: gradientMap
+                        });
+                        child.material.needsUpdate = true;
+                    }
                 }
 
                 if (child.name.toLowerCase().includes('lamp')) {
-                    const lampLight = new THREE.PointLight(0xfff0dd, 4.0, 12);
+                    const lampLight = new THREE.PointLight(0xfff0dd, 3.5, 12);
                     lampLight.castShadow = true;
                     lampLight.shadow.mapSize.set(1024, 1024);
                     
@@ -154,13 +188,7 @@
             requestAnimationFrame(animate);
             const elapsedTime = clock.getElapsedTime();
 
-            const positions = fireflyGeometry.attributes.position.array;
-            for (let i = 0; i < fireflyCount; i++) {
-                positions[i * 3 + 1] = fireflyInitialY[i] + Math.sin(elapsedTime * fireflySpeeds[i] + i) * 0.25;
-                positions[i * 3] += Math.cos(elapsedTime * 0.5 + i) * 0.001;
-            }
-            fireflyGeometry.attributes.position.needsUpdate = true;
-            fireflyMaterial.opacity = 0.6 + Math.sin(elapsedTime * 2) * 0.3;
+            fireflyShaderMaterial.uniforms.uTime.value = elapsedTime;
 
             if (isZooming) {
                 camera.position.lerp(targetCameraPos, 0.05);
